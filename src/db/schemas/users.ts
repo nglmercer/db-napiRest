@@ -6,6 +6,7 @@ export const usersSchema: TableSchema = {
     { name: "id", type: "integer" },
     { name: "name", type: "string" },
     { name: "email", type: "string" },
+    { name: "password", type: "string" },
     { name: "age", type: "integer" },
     { name: "active", type: "boolean" },
     { name: "created_at", type: "string" },

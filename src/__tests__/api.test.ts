@@ -12,28 +12,30 @@ const putReq = (path: string, body: object) =>
 const deleteReq = (path: string) =>
   app.fetch(new Request(`http://localhost${path}`, { method: "DELETE" }));
 
+const json = async <T>(res: Response) => res.json() as Promise<T>;
+
 describe("Root API", () => {
   test("GET / returns API info", async () => {
     const res = await getReq("/");
-    const json = await res.json();
-    expect(json.name).toBe("DBOBJ + Hono API");
-    expect(json.version).toBe("1.0.0");
+    const data = await json<{ name: string; version: string }>(res);
+    expect(data.name).toBe("DBOBJ + Hono API");
+    expect(data.version).toBe("1.0.0");
   });
 });
 
 describe("Tables API", () => {
   test("GET /api/v1/tables returns tables list", async () => {
     const res = await getReq("/api/v1/tables");
-    const json = await res.json();
+    const data = await json<{ tables: unknown[] }>(res);
     expect(res.status).toBe(200);
-    expect(json.tables).toBeDefined();
+    expect(data.tables).toBeDefined();
   });
 
   test("GET /api/v1/tables/:name returns table metadata", async () => {
     const res = await getReq("/api/v1/tables/users");
-    const json = await res.json();
+    const data = await json<{ columns: unknown[] }>(res);
     expect(res.status).toBe(200);
-    expect(json.columns).toBeDefined();
+    expect(data.columns).toBeDefined();
   });
 
   test("GET /api/v1/tables/:name returns 404 for non-existent table", async () => {
@@ -45,16 +47,16 @@ describe("Tables API", () => {
 describe("CRUD API", () => {
   test("GET /api/v1/users returns users", async () => {
     const res = await getReq("/api/v1/users");
-    const json = await res.json();
+    const data = await json<{ data: unknown[] }>(res);
     expect(res.status).toBe(200);
-    expect(json.data).toBeDefined();
+    expect(data.data).toBeDefined();
   });
 
   test("GET /api/v1/users with limit and offset", async () => {
     const res = await getReq("/api/v1/users?limit=10&offset=0");
-    const json = await res.json();
+    const data = await json<{ data: unknown[] }>(res);
     expect(res.status).toBe(200);
-    expect(Array.isArray(json.data)).toBe(true);
+    expect(Array.isArray(data.data)).toBe(true);
   });
 
   test("GET /api/v1/users/:id returns 404 for non-existent", async () => {

@@ -15,12 +15,13 @@ app.get("/", (c) => {
   });
 });
 
+export default app;
 
-const port = parseInt(process.env.PORT || "3001");
-
-const server = Bun.serve({
-  port: port,
-  fetch: app.fetch,
-})
-console.log(server.port);
-export default server;
+if (import.meta.main) {
+  const port = parseInt(process.env.PORT || "3001");
+  const server = Bun.serve({
+    port,
+    fetch: app.fetch,
+  });
+  console.log(`Server running on port ${server.port}`);
+}
