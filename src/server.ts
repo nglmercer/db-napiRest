@@ -1,11 +1,10 @@
 import { Hono } from "hono";
 import { db } from "./db";
-import { tablesRouter, crudRouter } from "./routes";
+import { v1Router } from "./routes";
 
 const app = new Hono();
 
-app.route("/api/tables", tablesRouter);
-app.route("/api", crudRouter);
+app.route("/api/v1", v1Router);
 
 app.get("/", (c) => {
   const tables = db.listTables().map((t) => ({ name: t, ...db.getTableMetadata(t) }));
@@ -16,4 +15,12 @@ app.get("/", (c) => {
   });
 });
 
-export default app;
+
+const port = parseInt(process.env.PORT || "3001");
+
+const server = Bun.serve({
+  port: port,
+  fetch: app.fetch,
+})
+console.log(server.port);
+export default server;
