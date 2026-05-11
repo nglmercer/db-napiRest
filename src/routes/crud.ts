@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { db } from "../db";
-import { getValidTables, findSchema, quoteValue, getNextId } from "../utils/db";
+import { getValidTables, findSchema, quoteValue, getNextId, tableGetById } from "../utils/db";
 
 const crudRouter = new Hono();
 
@@ -13,21 +13,19 @@ crudRouter.get("/:table", (c) => {
   const offset = parseInt(c.req.query("offset") || "0");
 
   const result = db.executeSql(`SELECT * FROM ${table}`);
-  const rows = Array.isArray(result) ? result.slice(offset, offset + limit) : [];
-  return c.json({ data: rows });
+  const data = Array.isArray(result) ? result.slice(offset, offset + limit) : [];
+  return c.json({ data });
 });
 
 crudRouter.get("/:table/:id", (c) => {
   const table = c.req.param("table");
-  const id = c.req.param("id");
+  const id = parseInt(c.req.param("id"));
   const validTables = getValidTables();
   if (!validTables.has(table)) return c.json({ error: "Table not found" }, 404);
 
-  const result = db.executeSql(`SELECT * FROM ${table} WHERE id = ${id}`);
-  if (!Array.isArray(result) || result.length === 0) {
-    return c.json({ error: "Not found" }, 404);
-  }
-  return c.json({ data: result[0] });
+  const data = tableGetById(table, id);
+  if (!data) return c.json({ error: "Not found" }, 404);
+  return c.json({ data });
 });
 
 crudRouter.post("/:table", async (c) => {
@@ -72,10 +70,8 @@ crudRouter.put("/:table/:id", async (c) => {
   const validTables = getValidTables();
   if (!validTables.has(table)) return c.json({ error: "Table not found" }, 404);
 
-  const existing = db.executeSql(`SELECT * FROM ${table} WHERE id = ${id}`);
-  if (!Array.isArray(existing) || existing.length === 0) {
-    return c.json({ error: "Not found" }, 404);
-  }
+  const ids = db.findByI64(table, "id", parseInt(id));
+  if (ids.length === 0) return c.json({ error: "Not found" }, 404);
 
   const body = await c.req.json();
   const schema = findSchema(table);
@@ -104,16 +100,14 @@ crudRouter.put("/:table/:id", async (c) => {
 
 crudRouter.delete("/:table/:id", (c) => {
   const table = c.req.param("table");
-  const id = c.req.param("id");
+  const id = parseInt(c.req.param("id"));
   const validTables = getValidTables();
   if (!validTables.has(table)) return c.json({ error: "Table not found" }, 404);
 
-  const existing = db.executeSql(`SELECT * FROM ${table} WHERE id = ${id}`);
-  if (!Array.isArray(existing) || existing.length === 0) {
-    return c.json({ error: "Not found" }, 404);
-  }
+  const ids = db.findByI64(table, "id", id);
+  if (ids.length === 0) return c.json({ error: "Not found" }, 404);
 
-  db.executeSql(`DELETE FROM ${table} WHERE id = ${id}`);
+  db.deleteRow(table, id);
   return c.json({ ok: true });
 });
 

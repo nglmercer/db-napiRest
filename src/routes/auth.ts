@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { hash, compare, create, verify } from "webtoken-rs";
 import { db } from "../db";
-import { findSchema } from "../utils/db";
 
 const AUTH_SECRET = process.env.AUTH_SECRET || "your-32-character-secret-key-1234";
 const TOKEN_EXPIRY = 3600;
@@ -16,34 +15,36 @@ authRouter.post("/register", async (c) => {
     return c.json({ error: "Email and password required" }, 400);
   }
 
-  const existing = db.executeSql(`SELECT * FROM users WHERE email = '${email}'`);
+  const existing = db.executeSql(`SELECT id FROM users WHERE email = '${email}'`);
   if (Array.isArray(existing) && existing.length > 0) {
     return c.json({ error: "Email already registered" }, 409);
   }
 
-  const hashedPassword = await hash(password);
-  const schema = findSchema("users")!;
-  const nextId = Math.floor(Math.random() * 100000) + 1000;
+  const [hashedPassword, nextId] = await Promise.all([
+    hash(password),
+    (async () => {
+      const result = db.executeSql("SELECT id FROM users");
+      let max = 0;
+      if (Array.isArray(result)) {
+        for (const row of result) {
+          if (row.id > max) max = row.id;
+        }
+      }
+      return max + 1;
+    })(),
+  ]);
 
-  const columns = ["id", "email", "password", "name", "active", "created_at"];
-  const values = [
-    nextId,
-    `'${email}'`,
-    `'${hashedPassword}'`,
-    name ? `'${name}'` : "'User'",
-    "TRUE",
-    `'${new Date().toISOString()}'`,
-  ];
+  const now = new Date().toISOString();
+  db.executeSql(
+    `INSERT INTO users (id, email, password, name, active, created_at) VALUES (${nextId}, '${email}', '${hashedPassword}', '${name || "User"}', TRUE, '${now}')`
+  );
 
-  db.executeSql(`INSERT INTO users (${columns.join(", ")}) VALUES (${values.join(", ")})`);
+  const token = create({ sub: String(nextId), email }, AUTH_SECRET, TOKEN_EXPIRY);
 
-  const user = db.executeSql(`SELECT * FROM users WHERE id = ${nextId}`);
-  const userData = Array.isArray(user) ? user[0] : user;
-  delete userData.password;
-
-  const token = create({ sub: String(userData.id), email: userData.email }, AUTH_SECRET, TOKEN_EXPIRY);
-
-  return c.json({ user: userData, token }, 201);
+  return c.json({
+    user: { id: nextId, email, name: name || "User", active: true, created_at: now },
+    token,
+  }, 201);
 });
 
 authRouter.post("/login", async (c) => {
@@ -54,7 +55,7 @@ authRouter.post("/login", async (c) => {
     return c.json({ error: "Email and password required" }, 400);
   }
 
-  const result = db.executeSql(`SELECT * FROM users WHERE email = '${email}'`);
+  const result = db.executeSql(`SELECT id, email, password, name, active, created_at FROM users WHERE email = '${email}'`);
   if (!Array.isArray(result) || result.length === 0) {
     return c.json({ error: "Invalid credentials" }, 401);
   }
@@ -65,10 +66,9 @@ authRouter.post("/login", async (c) => {
     return c.json({ error: "Invalid credentials" }, 401);
   }
 
-  delete user.password;
   const token = create({ sub: String(user.id), email: user.email }, AUTH_SECRET, TOKEN_EXPIRY);
 
-  return c.json({ user, token });
+  return c.json({ user: { ...user, password: undefined }, token });
 });
 
 authRouter.get("/me", (c) => {
