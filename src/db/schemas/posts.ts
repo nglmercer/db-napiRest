@@ -1,14 +1,14 @@
-import type { TableSchema } from "../schema";
+import { type TableSchema, DataType } from "../schema";
 
 export const postsSchema: TableSchema = {
   name: "posts",
   columns: [
-    { name: "id", type: "integer" },
-    { name: "user_id", type: "integer" },
-    { name: "title", type: "string" },
-    { name: "content", type: "string" },
-    { name: "published", type: "boolean" },
-    { name: "created_at", type: "string" },
-    { name: "updated_at", type: "string" },
+    { name: "id", dataType: DataType.Integer },
+    { name: "user_id", dataType: DataType.Integer },
+    { name: "title", dataType: DataType.String },
+    { name: "content", dataType: DataType.String },
+    { name: "published", dataType: DataType.Boolean },
+    { name: "created_at", dataType: DataType.String },
+    { name: "updated_at", dataType: DataType.String },
   ],
 };

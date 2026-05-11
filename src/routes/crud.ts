@@ -54,7 +54,7 @@ crudRouter.post("/:table", async (c) => {
 
   const values = columns.map((col) => {
     if (col === "id") return String(nextId);
-    const type = schema.columns.find((c) => c.name === col)!.type;
+    const type = schema.columns.find((c) => c.name === col)!.dataType;
     return quoteValue(body[col], type);
   });
 
@@ -91,7 +91,7 @@ crudRouter.put("/:table/:id", async (c) => {
 
   const setClauses = columns
     .map((col) => {
-      const type = schema.columns.find((c) => c.name === col)!.type;
+      const type = schema.columns.find((c) => c.name === col)!.dataType;
       return `${col} = ${quoteValue(body[col], type)}`;
     })
     .join(", ");

@@ -1,12 +1,12 @@
-import type { TableSchema } from "../schema";
+import { type TableSchema, DataType } from "../schema";
 
 export const commentsSchema: TableSchema = {
   name: "comments",
   columns: [
-    { name: "id", type: "integer" },
-    { name: "post_id", type: "integer" },
-    { name: "user_id", type: "integer" },
-    { name: "content", type: "string" },
-    { name: "created_at", type: "string" },
+    { name: "id", dataType: DataType.Integer },
+    { name: "post_id", dataType: DataType.Integer },
+    { name: "user_id", dataType: DataType.Integer },
+    { name: "content", dataType: DataType.String },
+    { name: "created_at", dataType: DataType.String },
   ],
 };

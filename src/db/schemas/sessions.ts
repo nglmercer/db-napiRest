@@ -1,12 +1,12 @@
-import type { TableSchema } from "../schema";
+import { type TableSchema, DataType } from "../schema";
 
 export const sessionsSchema: TableSchema = {
   name: "sessions",
   columns: [
-    { name: "id", type: "integer" },
-    { name: "user_id", type: "integer" },
-    { name: "token", type: "string" },
-    { name: "expires_at", type: "string" },
-    { name: "created_at", type: "string" },
+    { name: "id", dataType: DataType.Integer },
+    { name: "user_id", dataType: DataType.Integer },
+    { name: "token", dataType: DataType.String },
+    { name: "expires_at", dataType: DataType.String },
+    { name: "created_at", dataType: DataType.String },
   ],
 };

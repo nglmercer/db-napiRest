@@ -1,12 +1,12 @@
-import type { TableSchema } from "../schema";
+import { type TableSchema, DataType } from "../schema";
 
 export const orderItemsSchema: TableSchema = {
   name: "order_items",
   columns: [
-    { name: "id", type: "integer" },
-    { name: "order_id", type: "integer" },
-    { name: "product_id", type: "integer" },
-    { name: "quantity", type: "integer" },
-    { name: "unit_price", type: "float" },
+    { name: "id", dataType: DataType.Integer },
+    { name: "order_id", dataType: DataType.Integer },
+    { name: "product_id", dataType: DataType.Integer },
+    { name: "quantity", dataType: DataType.Integer },
+    { name: "unit_price", dataType: DataType.Float },
   ],
 };

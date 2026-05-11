@@ -1,10 +1,11 @@
 import { db } from "../db";
-import { schemas } from "../db/schema";
+import { schemas, DataType } from "../db/schema";
+import type { DataType as DataTypeEnum } from "dbobj-napi";
 
-export function quoteValue(val: unknown, type: string): string {
+export function quoteValue(val: unknown, dataType: DataTypeEnum): string {
   if (val === null || val === undefined) return "NULL";
-  if (type === "integer" || type === "float") return String(val);
-  if (type === "boolean") return val ? "TRUE" : "FALSE";
+  if (dataType === DataType.Integer || dataType === DataType.Float) return String(val);
+  if (dataType === DataType.Boolean) return val ? "TRUE" : "FALSE";
   return `'${String(val).replace(/'/g, "''")}'`;
 }
 

@@ -1,12 +1,12 @@
-import type { TableSchema } from "../schema";
+import { type TableSchema, DataType } from "../schema";
 
 export const ordersSchema: TableSchema = {
   name: "orders",
   columns: [
-    { name: "id", type: "integer" },
-    { name: "user_id", type: "integer" },
-    { name: "total", type: "float" },
-    { name: "status", type: "string" },
-    { name: "created_at", type: "string" },
+    { name: "id", dataType: DataType.Integer },
+    { name: "user_id", dataType: DataType.Integer },
+    { name: "total", dataType: DataType.Float },
+    { name: "status", dataType: DataType.String },
+    { name: "created_at", dataType: DataType.String },
   ],
 };
