@@ -1,0 +1,10 @@
+export { usersSchema } from "./users";
+export { productsSchema } from "./products";
+export { categoriesSchema } from "./categories";
+export { ordersSchema } from "./orders";
+export { orderItemsSchema } from "./orderItems";
+export { postsSchema } from "./posts";
+export { commentsSchema } from "./comments";
+export { tagsSchema } from "./tags";
+export { postTagsSchema } from "./postTags";
+export { sessionsSchema } from "./sessions";
