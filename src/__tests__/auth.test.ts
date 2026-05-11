@@ -81,6 +81,7 @@ describe("Auth API", () => {
 
     const res = await getReq("/api/v1/auth/me", token);
     const data = await json<{ user: unknown }>(res);
+    console.log(data);
     expect(res.status).toBe(200);
     expect(data.user).toBeDefined();
   });

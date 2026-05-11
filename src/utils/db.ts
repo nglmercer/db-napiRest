@@ -25,7 +25,7 @@ export function getNextId(table: string): number {
 }
 
 export function tableGetById(table: string, id: number): unknown | null {
-  const result = db.executeSql(`SELECT * FROM ${table} WHERE id = ${id}`);
+  const result = db.findByI64(table, "id", id);
   return Array.isArray(result) && result.length > 0 ? result[0] : null;
 }
 

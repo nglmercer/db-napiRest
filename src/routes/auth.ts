@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { hash, compare, create, verify } from "webtoken-rs";
 import { db } from "../db";
-
+import { getNextId } from "../utils/db";
 const AUTH_SECRET = process.env.AUTH_SECRET || "your-32-character-secret-key-1234";
 const TOKEN_EXPIRY = 3600;
 
@@ -19,25 +19,11 @@ authRouter.post("/register", async (c) => {
   if (Array.isArray(existing) && existing.length > 0) {
     return c.json({ error: "Email already registered" }, 409);
   }
-
-  const [hashedPassword, nextId] = await Promise.all([
-    hash(password),
-    (async () => {
-      const result = db.executeSql("SELECT id FROM users");
-      let max = 0;
-      if (Array.isArray(result)) {
-        for (const row of result) {
-          if (row.id > max) max = row.id;
-        }
-      }
-      return max + 1;
-    })(),
-  ]);
+  const nextId = getNextId('users');
+  const hashedPassword = await hash(password);
 
   const now = new Date().toISOString();
-  db.executeSql(
-    `INSERT INTO users (id, email, password, name, active, created_at) VALUES (${nextId}, '${email}', '${hashedPassword}', '${name || "User"}', TRUE, '${now}')`
-  );
+  db.insertRow('users', [nextId, email, hashedPassword, name || "User", true, now])
 
   const token = create({ sub: String(nextId), email }, AUTH_SECRET, TOKEN_EXPIRY);
 

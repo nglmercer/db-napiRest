@@ -9,11 +9,10 @@ crudRouter.get("/:table", (c) => {
   const validTables = getValidTables();
   if (!validTables.has(table)) return c.json({ error: "Table not found" }, 404);
 
-  const limit = parseInt(c.req.query("limit") || "100");
-  const offset = parseInt(c.req.query("offset") || "0");
-
-  const result = db.executeSql(`SELECT * FROM ${table}`);
-  const data = Array.isArray(result) ? result.slice(offset, offset + limit) : [];
+  const limit = Number(c.req.query("limit") || "100");
+  const offset = Number(c.req.query("offset") || "0");
+  const result = db.getRows(table, offset, limit);
+  const data = result;
   return c.json({ data });
 });
 
@@ -55,13 +54,15 @@ crudRouter.post("/:table", async (c) => {
     const type = schema.columns.find((c) => c.name === col)!.dataType;
     return quoteValue(body[col], type);
   });
-
+  //this table has 7 columns and insertRow receive not same quantity of columns
+  //db.insertRow(table, [...values]);
+  console.log(columns, values)
   db.executeSql(
     `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${values.join(", ")})`
   );
 
-  const row = db.executeSql(`SELECT * FROM ${table} WHERE id = ${nextId}`);
-  return c.json({ data: Array.isArray(row) ? row[0] : row }, 201);
+  const row = tableGetById(table, nextId);
+  return c.json({ data: row }, 201);
 });
 
 crudRouter.put("/:table/:id", async (c) => {
@@ -94,8 +95,8 @@ crudRouter.put("/:table/:id", async (c) => {
 
   db.executeSql(`UPDATE ${table} SET ${setClauses} WHERE id = ${id}`);
 
-  const row = db.executeSql(`SELECT * FROM ${table} WHERE id = ${id}`);
-  return c.json({ data: Array.isArray(row) ? row[0] : row });
+  const row = tableGetById(table, parseInt(id));
+  return c.json({ data: row });
 });
 
 crudRouter.delete("/:table/:id", (c) => {
