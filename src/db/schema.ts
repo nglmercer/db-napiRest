@@ -1,9 +1,12 @@
-import type { Database } from "dbobj-napi";
+import type { Database, ColumnDefinition } from "dbobj-napi";
+import { DataType } from "dbobj-napi";
 
-export interface TableSchema {
+export { DataType };
+export type { ColumnDefinition };
+export type TableSchema = {
   name: string;
-  columns: { name: string; type: string }[];
-}
+  columns: ColumnDefinition[];
+};
 
 import {
   usersSchema,
@@ -37,9 +40,7 @@ export function initSchema(db: Database): void {
   for (const schema of schemas) {
     if (existingTables.has(schema.name)) continue;
 
-    const colNames = schema.columns.map((c) => c.name);
-    const colTypes = schema.columns.map((c) => c.type);
-    db.createTable(schema.name, colNames, colTypes);
+    db.createTable(schema.name, schema.columns);
     console.log(`Created table: ${schema.name}`);
   }
 
