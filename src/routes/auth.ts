@@ -9,9 +9,9 @@ const authRouter = new Hono();
 
 authRouter.post("/register", async (c) => {
   const body = await c.req.json();
-  const { email, password, name } = body;
+  const { email, password, name, age } = body;
 
-  if (!email || !password) {
+  if (!email || !password || !age || !name) {
     return c.json({ error: "Email and password required" }, 400);
   }
 
@@ -23,12 +23,27 @@ authRouter.post("/register", async (c) => {
   const hashedPassword = await hash(password);
 
   const now = new Date().toISOString();
-  db.insertRow('users', [nextId, email, hashedPassword, name || "User", true, now])
+  /**
+   * 
+   export const usersSchema: TableSchema = {
+     name: "users",
+     columns: [
+       { name: "id", dataType: DataType.Integer },
+       { name: "name", dataType: DataType.String },
+       { name: "email", dataType: DataType.String },
+       { name: "password", dataType: DataType.String },
+       { name: "age", dataType: DataType.Integer },
+       { name: "active", dataType: DataType.Boolean },
+       { name: "created_at", dataType: DataType.String },
+     ],
+   };
+   */
+  db.insertRow('users', [nextId, name || "User", email, hashedPassword, age, true, now])
 
   const token = create({ sub: String(nextId), email }, AUTH_SECRET, TOKEN_EXPIRY);
 
   return c.json({
-    user: { id: nextId, email, name: name || "User", active: true, created_at: now },
+    user: { id: nextId, name: name || "User", email, hashedPassword, age, active: true, created_at: now },
     token,
   }, 201);
 });
