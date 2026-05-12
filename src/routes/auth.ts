@@ -1,50 +1,26 @@
 import { Hono } from "hono";
-import { hash, compare, create, verify } from "webtoken-rs";
+import { create, verify, scryptHash, scryptCompare } from "webtoken-rs";
 import { db } from "../db";
-import { getColumnMax } from "../utils/db";
 
 const AUTH_SECRET = process.env.AUTH_SECRET || "your-32-character-secret-key-1234";
 const TOKEN_EXPIRY = 3600;
 
 const authRouter = new Hono();
 
-/**
- * Build a user object from column arrays for a given row index.
- * getRows() and executeSql() both return interned string placeholders —
- * getColumnString/getColumnI64/getColumnBool are the only APIs that return
- * actual deserialized values from dbobj-napi.
- */
-function buildUserAtIndex(idx: number): Record<string, unknown> {
-  const ids = db.getColumnI64("users", "id");
-  const names = db.getColumnString("users", "name");
-  const emails = db.getColumnString("users", "email");
-  const passwords = db.getColumnString("users", "password");
-  const ages = db.getColumnI64("users", "age");
-  const actives = db.getColumnBool("users", "active");
-  const dates = db.getColumnString("users", "created_at");
-  return {
-    id: Number(ids[idx]),
-    name: names[idx],
-    email: emails[idx],
-    password: passwords[idx],
-    age: Number(ages[idx]),
-    active: actives[idx],
-    created_at: dates[idx],
-  };
-}
-
 function getUserByEmail(email: string): Record<string, unknown> | null {
   // findByString returns row indices (positions), not ID values
   const indices = db.findByString("users", "email", email);
   if (!indices || indices.length === 0) return null;
-  return buildUserAtIndex(Number(indices[0]));
+  const row = db.getRowById("users", Number(indices[0]));
+  return row;
 }
 
 function getUserById(id: number): Record<string, unknown> | null {
   // findByI64 returns row indices (positions), not ID values
   const indices = db.findByI64("users", "id", id);
   if (!indices || indices.length === 0) return null;
-  return buildUserAtIndex(Number(indices[0]));
+  const row = db.getRowById("users", Number(indices[0]));
+  return row;
 }
 
 authRouter.post("/register", async (c) => {
@@ -54,7 +30,7 @@ authRouter.post("/register", async (c) => {
   if (!email || !password) {
     return c.json({ error: "Email and password required" }, 400);
   }
-
+  // db.createUniqueIndex("users", "email");
   const existingIds = db.findByString("users", "email", email);
   if (existingIds && existingIds.length > 0) {
     return c.json({ error: "Email already registered" }, 409);
@@ -66,12 +42,17 @@ authRouter.post("/register", async (c) => {
     db.sumColumn("users", "age");   // → 1000
     db.avgColumn("users", "age");   // → 28.5
   */
-  const nextId = db.maxColumn("users", "id") + 1;
-  const hashedPassword = await hash(password);
+  const nextId = (db.maxColumn("users", "id") ?? 0) + 1;
+  const hashedPassword = await scryptHash(password, 10);
   const now = new Date().toISOString();
 
   // Column order: id, name, email, password, age, active, created_at
-  db.insertRow("users", [nextId, name || "User", email, hashedPassword, age ?? null, true, now]);
+  const resp = db.insertOrReplace(
+    "users",
+    [nextId, name || "User", email, hashedPassword, age ?? null, true, now],
+    "email",  // unique column to match on
+  );
+  if (!resp) return c.json({ error: "Failed to register" }, 500);
 
   const token = create({ sub: String(nextId), email }, AUTH_SECRET, TOKEN_EXPIRY);
 
@@ -97,7 +78,7 @@ authRouter.post("/login", async (c) => {
     return c.json({ error: "Invalid credentials" }, 401);
   }
 
-  const isValid = await compare(password, user.password as string);
+  const isValid = await scryptCompare(password, user.password as string);
   if (!isValid) {
     return c.json({ error: "Invalid credentials" }, 401);
   }

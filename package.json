@@ -18,8 +18,8 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "dbobj-napi": "^0.2.0",
+    "dbobj-napi": "^0.2.2",
     "hono": "^4.12.18",
-    "webtoken-rs": "^1.0.0"
+    "webtoken-rs": "^1.0.2"
   }
 }
