@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
 import { db } from "./db";
 import { v1Router } from "./routes";
 
@@ -14,6 +15,9 @@ app.get("/", (c) => {
     tables,
   });
 });
+
+app.use("/assets/*", serveStatic({ root: "./web/dist" }));
+app.get("/*", serveStatic({ path: "./web/dist/index.html" }));
 
 export default app;
 

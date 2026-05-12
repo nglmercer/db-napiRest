@@ -19,6 +19,7 @@ import {
   tagsSchema,
   postTagsSchema,
   sessionsSchema,
+  reelsSchema,
 } from "./schemas";
 
 export const schemas: TableSchema[] = [
@@ -32,6 +33,7 @@ export const schemas: TableSchema[] = [
   tagsSchema,
   postTagsSchema,
   sessionsSchema,
+  reelsSchema,
 ];
 
 export function initSchema(db: Database): void {

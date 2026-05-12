@@ -8,3 +8,4 @@ export { commentsSchema } from "./comments";
 export { tagsSchema } from "./tags";
 export { postTagsSchema } from "./postTags";
 export { sessionsSchema } from "./sessions";
+export { reelsSchema } from "./reels";
