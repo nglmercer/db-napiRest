@@ -24,24 +24,16 @@ reelsRouter.use("/*", authMiddleware);
 
 reelsRouter.get("/", (c) => {
   const userId = (c as any).get("userId") as number;
-  const limit = Number(c.req.query("limit") || "50");
-  const offset = Number(c.req.query("offset") || "0");
 
-  const indices = db.findByI64("reels", "user_id", userId);
-  const data = indices.map((i: any) => db.getRowById("reels", Number(i)));
-  return c.json({ data: data.slice(offset, offset + limit) });
-});
-
-reelsRouter.get("/all", (c) => {
-  const data = db.getRows("reels", 0, 100);
+  const result = db.executeSql(`SELECT * FROM reels WHERE user_id = ${userId}`);
+  const data = Array.isArray(result) ? result : [];
   return c.json({ data });
 });
 
 reelsRouter.get("/:id", (c) => {
   const id = parseInt(c.req.param("id"));
-  const indices = db.findByI64("reels", "id", id);
-  if (!indices || indices.length === 0) return c.json({ error: "Not found" }, 404);
-  const data = db.getRowById("reels", Number(indices[0]));
+  const result = db.executeSql(`SELECT * FROM reels WHERE id = ${id}`);
+  const data = Array.isArray(result) && result.length > 0 ? result[0] : null;
   if (!data) return c.json({ error: "Not found" }, 404);
   return c.json({ data });
 });
@@ -59,13 +51,12 @@ reelsRouter.post("/", async (c) => {
   const now = new Date().toISOString();
 
   const columns = ["id", "user_id", "title", "description", "video_url", "thumbnail_url", "views", "created_at"];
-  const values = `'${nextId}', '${userId}', '${String(title).replace(/'/g, "''")}', '${String(description || "").replace(/'/g, "''")}', '${String(video_url).replace(/'/g, "''")}', '${String(thumbnail_url || "").replace(/'/g, "''")}', 0, '${now}'`;
+  const values = `${nextId}, ${userId}, '${String(title).replace(/'/g, "''")}', '${String(description || "").replace(/'/g, "''")}', '${String(video_url).replace(/'/g, "''")}', '${String(thumbnail_url || "").replace(/'/g, "''")}', 0, '${now}'`;
 
   db.executeSql(`INSERT INTO reels (${columns.join(", ")}) VALUES (${values})`);
 
-  const indices = db.findByI64("reels", "id", nextId);
-  const row = db.getRowById("reels", Number(indices[0]));
-  return c.json({ data: row }, 201);
+  const row = db.executeSql(`SELECT * FROM reels WHERE id = ${nextId}`);
+  return c.json({ data: Array.isArray(row) ? row[0] : row }, 201);
 });
 
 reelsRouter.put("/:id", async (c) => {
@@ -73,35 +64,35 @@ reelsRouter.put("/:id", async (c) => {
   const userId = (c as any).get("userId") as number;
   const body = await c.req.json();
 
-  const indices = db.findByI64("reels", "id", id);
-  if (!indices || indices.length === 0) return c.json({ error: "Not found" }, 404);
-
-  const reel = db.getRowById("reels", Number(indices[0])) as Record<string, unknown>;
+  const existing = db.executeSql(`SELECT * FROM reels WHERE id = ${id}`);
+  const reel = Array.isArray(existing) && existing.length > 0 ? existing[0] as Record<string, unknown> : null;
+  if (!reel) return c.json({ error: "Not found" }, 404);
   if (reel && reel.user_id !== userId) return c.json({ error: "Forbidden" }, 403);
 
   const setClauses = Object.entries(body)
     .filter(([key]) => !["id", "user_id", "created_at"].includes(key))
-    .map(([key, val]) => `${key} = '${String(val).replace(/'/g, "''")}'`)
+    .map(([key, val]) => {
+      if (typeof val === "number") return `${key} = ${val}`;
+      return `${key} = '${String(val).replace(/'/g, "''")}'`;
+    })
     .join(", ");
 
   if (setClauses) db.executeSql(`UPDATE reels SET ${setClauses} WHERE id = ${id}`);
 
-  const updatedIndices = db.findByI64("reels", "id", id);
-  const row = db.getRowById("reels", Number(updatedIndices[0]));
-  return c.json({ data: row });
+  const updated = db.executeSql(`SELECT * FROM reels WHERE id = ${id}`);
+  return c.json({ data: Array.isArray(updated) ? updated[0] : updated });
 });
 
 reelsRouter.delete("/:id", (c) => {
   const id = parseInt(c.req.param("id"));
   const userId = (c as any).get("userId") as number;
 
-  const indices = db.findByI64("reels", "id", id);
-  if (!indices || indices.length === 0) return c.json({ error: "Not found" }, 404);
-
-  const reel = db.getRowById("reels", Number(indices[0])) as Record<string, unknown>;
+  const existing = db.executeSql(`SELECT * FROM reels WHERE id = ${id}`);
+  const reel = Array.isArray(existing) && existing.length > 0 ? existing[0] as Record<string, unknown> : null;
+  if (!reel) return c.json({ error: "Not found" }, 404);
   if (reel && reel.user_id !== userId) return c.json({ error: "Forbidden" }, 403);
 
-  db.deleteRow("reels", id);
+  db.executeSql(`DELETE FROM reels WHERE id = ${id}`);
   return c.json({ ok: true });
 });
 

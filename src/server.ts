@@ -20,12 +20,3 @@ app.use("/assets/*", serveStatic({ root: "./web/dist" }));
 app.get("/*", serveStatic({ path: "./web/dist/index.html" }));
 
 export default app;
-
-if (import.meta.main) {
-  const port = parseInt(process.env.PORT || "3001");
-  const server = Bun.serve({
-    port,
-    fetch: app.fetch,
-  });
-  console.log(`Server running on port ${server.port}`);
-}
