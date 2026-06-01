@@ -90,16 +90,12 @@ authRouter.post("/login", async (c) => {
   }
 
   const body = bodyresult.data;
-  const user = db
-    .select()
-    .from(users)
-    .where(eq(users.email, body.email))
-    .get();
+  const user = db.select().from(users).where(eq(users.email, body.email)).get();
   if (!user) {
     return c.json({ error: "Invalid credentials" }, 401);
   }
 
-  const isValid = await scryptCompare(body.password, user.password);
+  const isValid = await scryptCompare(body.password, user.password!);
   if (!isValid) {
     return c.json({ error: "Invalid credentials" }, 401);
   }
