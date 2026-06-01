@@ -1,7 +1,7 @@
 import { Router } from "napi-router/adapter/router";
 import { Validator } from "napi-router";
 import { s, validate } from "napi-router/adapter/router/validator";
-import { db, sqlite } from "../db";
+import { db, client } from "../db";
 import { reels } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { verify } from "webtoken-rs";
@@ -31,15 +31,15 @@ reelsRouter.use("*", "/", async (c) => {
   }
 });
 
-reelsRouter.get("/", (c) => {
+reelsRouter.get("/", async (c) => {
   const userId = c.get<number>("userId");
-  const data = db.select().from(reels).where(eq(reels.user_id, userId)).all();
+  const data = await db.select().from(reels).where(eq(reels.user_id, userId)).all();
   return c.json({ data });
 });
 
-reelsRouter.get("/:id", (c) => {
+reelsRouter.get("/:id", async (c) => {
   const id = c.req.pathParam("id").int(0)!;
-  const data = db.select().from(reels).where(eq(reels.id, id)).get();
+  const data = await db.select().from(reels).where(eq(reels.id, id)).get();
   if (!data) {
     return c.json({ error: "Not found" }, 404);
   }
@@ -69,7 +69,7 @@ reelsRouter.post("/", async (c) => {
 
   const now = new Date().toISOString();
 
-  const result = db
+  const result = await db
     .insert(reels)
     .values({
       user_id: userId,
@@ -91,7 +91,7 @@ reelsRouter.put("/:id", async (c) => {
   const userId = c.get<number>("userId");
   const body = (await c.req.json()) as Record<string, unknown>;
 
-  const existing = db.select().from(reels).where(eq(reels.id, id)).get();
+  const existing = await db.select().from(reels).where(eq(reels.id, id)).get();
   if (!existing) {
     return c.json({ error: "Not found" }, 404);
   }
@@ -106,22 +106,21 @@ reelsRouter.put("/:id", async (c) => {
   }
 
   const values = Object.values(updateData);
-  const result = sqlite
-    .query(
-      `UPDATE "reels" SET ${Object.keys(updateData)
-        .map((k) => `"${k}" = ?`)
-        .join(", ")} WHERE id = ? RETURNING *`,
-    )
-    .get(...(values as (string | number | boolean | null)[]), id);
+  const result = await client.execute({
+    sql: `UPDATE "reels" SET ${Object.keys(updateData)
+      .map((k) => `"${k}" = ?`)
+      .join(", ")} WHERE id = ? RETURNING *`,
+    args: [...values, id] as (string | number | boolean | null | bigint)[],
+  });
 
-  return c.json({ data: result });
+  return c.json({ data: result.rows[0] });
 });
 
-reelsRouter.delete("/:id", (c) => {
+reelsRouter.delete("/:id", async (c) => {
   const id = c.req.pathParam("id").int(0)!;
   const userId = c.get<number>("userId");
 
-  const existing = db.select().from(reels).where(eq(reels.id, id)).get();
+  const existing = await db.select().from(reels).where(eq(reels.id, id)).get();
   if (!existing) {
     return c.json({ error: "Not found" }, 404);
   }
@@ -129,7 +128,10 @@ reelsRouter.delete("/:id", (c) => {
     return c.json({ error: "Forbidden" }, 403);
   }
 
-  sqlite.run(`DELETE FROM "reels" WHERE id = ?`, [id]);
+  await client.execute({
+    sql: `DELETE FROM "reels" WHERE id = ?`,
+    args: [id],
+  });
   return c.json({ ok: true });
 });
 

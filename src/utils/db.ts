@@ -1,13 +1,13 @@
-import { db, sqlite } from "../db";
+import { db, client } from "../db";
 import * as schema from "../db/schema";
 import { eq, sql } from "drizzle-orm";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 
-export function getValidTables(): Set<string> {
-  const tables = sqlite
-    .query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-    .all() as { name: string }[];
-  return new Set(tables.map((t) => t.name));
+export async function getValidTables(): Promise<Set<string>> {
+  const result = await client.execute(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+  );
+  return new Set(result.rows.map((r) => r.name as string));
 }
 
 export function findSchema(tableName: string): SQLiteTable | undefined {
@@ -27,43 +27,58 @@ export function findSchema(tableName: string): SQLiteTable | undefined {
   return schemaMap[tableName];
 }
 
-export function getTableMetadata(tableName: string): { rowCount: number; columns: string[] } | null {
+export async function getTableMetadata(
+  tableName: string,
+): Promise<{ rowCount: number; columns: string[] } | null> {
   const table = findSchema(tableName);
   if (!table) return null;
 
   const columns = Object.keys(table).filter((key) => !key.startsWith("_"));
-  const countResult = sqlite
-    .query(`SELECT COUNT(*) as count FROM "${tableName}"`)
-    .get() as { count: number };
-  return { rowCount: countResult.count, columns };
+  const countResult = await client.execute(
+    `SELECT COUNT(*) as count FROM "${tableName}"`,
+  );
+  const count = countResult.rows[0]?.count as number;
+  return { rowCount: count, columns };
 }
 
-export function getTableColumns(tableName: string): string[] {
-  const result = sqlite.query(`PRAGMA table_info("${tableName}")`).all() as { name: string }[];
-  return result.map((r) => r.name);
+export async function getTableColumns(tableName: string): Promise<string[]> {
+  const result = await client.execute(`PRAGMA table_info("${tableName}")`);
+  return result.rows.map((r) => r.name as string);
 }
 
-export function getAllRows(tableName: string, limit = 100, offset = 0): unknown[] {
-  const rows = sqlite
-    .query(`SELECT * FROM "${tableName}" LIMIT ${limit} OFFSET ${offset}`)
-    .all();
-  return rows as unknown[];
+export async function getAllRows(
+  tableName: string,
+  limit = 100,
+  offset = 0,
+): Promise<unknown[]> {
+  const result = await client.execute(
+    `SELECT * FROM "${tableName}" LIMIT ${limit} OFFSET ${offset}`,
+  );
+  return result.rows as unknown[];
 }
 
-export function getRowById(tableName: string, id: number): unknown | null {
-  const row = sqlite
-    .query(`SELECT * FROM "${tableName}" WHERE id = ?`)
-    .get(id);
-  return row || null;
+export async function getRowById(
+  tableName: string,
+  id: number,
+): Promise<unknown | null> {
+  const result = await client.execute({
+    sql: `SELECT * FROM "${tableName}" WHERE id = ?`,
+    args: [id],
+  });
+  return result.rows[0] || null;
 }
 
-export function deleteRow(tableName: string, id: number): void {
-  sqlite.run(`DELETE FROM "${tableName}" WHERE id = ?`, [id]);
+export async function deleteRow(tableName: string, id: number): Promise<void> {
+  await client.execute({
+    sql: `DELETE FROM "${tableName}" WHERE id = ?`,
+    args: [id],
+  });
 }
 
-export function getNextId(tableName: string): number {
-  const result = sqlite
-    .query(`SELECT MAX(id) as maxId FROM "${tableName}"`)
-    .get() as { maxId: number | null };
-  return (result.maxId ?? 0) + 1;
+export async function getNextId(tableName: string): Promise<number> {
+  const result = await client.execute(
+    `SELECT MAX(id) as maxId FROM "${tableName}"`,
+  );
+  const maxId = result.rows[0]?.maxId as number | null;
+  return (maxId ?? 0) + 1;
 }

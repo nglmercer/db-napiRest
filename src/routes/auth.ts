@@ -28,7 +28,7 @@ authRouter.post("/register", async (c) => {
     return c.json({ error: bodyresult.errors }, 400);
   }
   const body = bodyresult.data;
-  const existing = db
+  const existing = await db
     .select()
     .from(users)
     .where(eq(users.email, body.email))
@@ -40,7 +40,7 @@ authRouter.post("/register", async (c) => {
   const hashedPassword = await scryptHash(body.password, 4);
   const now = new Date().toISOString();
 
-  const result = db
+  const result = await db
     .insert(users)
     .values({
       name: body.name || "User",
@@ -90,7 +90,7 @@ authRouter.post("/login", async (c) => {
   }
 
   const body = bodyresult.data;
-  const user = db.select().from(users).where(eq(users.email, body.email)).get();
+  const user = await db.select().from(users).where(eq(users.email, body.email)).get();
   if (!user) {
     return c.json({ error: "Invalid credentials" }, 401);
   }
@@ -121,7 +121,7 @@ authRouter.get("/me", async (c) => {
     const payload = verify(token, AUTH_SECRET);
     const userId = Number(payload.sub);
 
-    const user = db.select().from(users).where(eq(users.id, userId)).get();
+    const user = await db.select().from(users).where(eq(users.id, userId)).get();
     if (!user) {
       return c.json({ error: "User not found" }, 404);
     }

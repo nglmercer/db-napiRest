@@ -1,7 +1,7 @@
 import { Router } from "napi-router/adapter/router";
 import { Validator } from "napi-router";
 import { s, validate } from "napi-router/adapter/router/validator";
-import { sqlite } from "../db";
+import { client } from "../db";
 import {
   getValidTables,
   findSchema,
@@ -15,28 +15,28 @@ import {
 const validator = new Validator();
 const crudRouter = new Router();
 
-crudRouter.get("/:table", (c) => {
+crudRouter.get("/:table", async (c) => {
   const table = c.req.pathParam("table").require("table");
-  const validTables = getValidTables();
+  const validTables = await getValidTables();
   if (!validTables.has(table)) {
     return c.json({ error: "Table not found" }, 404);
   }
 
   const limit = c.req.queryParam("limit").int(100)!;
   const offset = c.req.queryParam("offset").int(0)!;
-  const data = getAllRows(table, limit, offset);
+  const data = await getAllRows(table, limit, offset);
   return c.json({ data });
 });
 
-crudRouter.get("/:table/:id", (c) => {
+crudRouter.get("/:table/:id", async (c) => {
   const table = c.req.pathParam("table").require("table");
   const id = c.req.pathParam("id").int(0)!;
-  const validTables = getValidTables();
+  const validTables = await getValidTables();
   if (!validTables.has(table)) {
     return c.json({ error: "Table not found" }, 404);
   }
 
-  const data = getRowById(table, id);
+  const data = await getRowById(table, id);
   if (!data) {
     return c.json({ error: "Not found" }, 404);
   }
@@ -45,7 +45,7 @@ crudRouter.get("/:table/:id", (c) => {
 
 crudRouter.post("/:table", async (c) => {
   const table = c.req.pathParam("table").require("table");
-  const validTables = getValidTables();
+  const validTables = await getValidTables();
   if (!validTables.has(table)) {
     return c.json({ error: "Table not found" }, 404);
   }
@@ -75,7 +75,7 @@ crudRouter.post("/:table", async (c) => {
     return c.json({ error: "Schema not found" }, 404);
   }
 
-  const columns = getTableColumns(table);
+  const columns = await getTableColumns(table);
   const insertData: Record<string, unknown> = {};
 
   for (const col of columns) {
@@ -103,12 +103,12 @@ crudRouter.post("/:table", async (c) => {
   const values = Object.values(insertData);
 
   try {
-    const result = sqlite.run(
-      `INSERT INTO "${table}" (${colNames}) VALUES (${placeholders})`,
-      values as (string | number | boolean | null)[],
-    );
+    const result = await client.execute({
+      sql: `INSERT INTO "${table}" (${colNames}) VALUES (${placeholders})`,
+      args: values as (string | number | boolean | null | bigint)[],
+    });
 
-    const row = getRowById(table, Number(result.lastInsertRowid));
+    const row = await getRowById(table, Number(result.lastInsertRowid));
     return c.json({ data: row }, 201);
   } catch (e) {
     return c.json({ error: "Insert failed", detail: String(e) }, 400);
@@ -118,18 +118,18 @@ crudRouter.post("/:table", async (c) => {
 crudRouter.put("/:table/:id", async (c) => {
   const table = c.req.pathParam("table").require("table");
   const id = c.req.pathParam("id").require("id");
-  const validTables = getValidTables();
+  const validTables = await getValidTables();
   if (!validTables.has(table)) {
     return c.json({ error: "Table not found" }, 404);
   }
 
-  const existing = getRowById(table, parseInt(id));
+  const existing = await getRowById(table, parseInt(id));
   if (!existing) {
     return c.json({ error: "Not found" }, 404);
   }
 
   const body = (await c.req.json()) as Record<string, unknown>;
-  const columns = getTableColumns(table);
+  const columns = await getTableColumns(table);
 
   const updateCols = columns.filter((col) => col !== "id" && col in body);
   if (updateCols.length === 0) {
@@ -139,29 +139,29 @@ crudRouter.put("/:table/:id", async (c) => {
   const setClauses = updateCols.map((col) => `"${col}" = ?`).join(", ");
   const values = updateCols.map((col) => body[col]);
 
-  sqlite.run(
-    `UPDATE "${table}" SET ${setClauses} WHERE id = ?`,
-    [...values, parseInt(id)] as (string | number | boolean | null)[],
-  );
+  await client.execute({
+    sql: `UPDATE "${table}" SET ${setClauses} WHERE id = ?`,
+    args: [...values, parseInt(id)] as (string | number | boolean | null | bigint)[],
+  });
 
-  const row = getRowById(table, parseInt(id));
+  const row = await getRowById(table, parseInt(id));
   return c.json({ data: row });
 });
 
-crudRouter.delete("/:table/:id", (c) => {
+crudRouter.delete("/:table/:id", async (c) => {
   const table = c.req.pathParam("table").require("table");
   const id = c.req.pathParam("id").int(0)!;
-  const validTables = getValidTables();
+  const validTables = await getValidTables();
   if (!validTables.has(table)) {
     return c.json({ error: "Table not found" }, 404);
   }
 
-  const existing = getRowById(table, id);
+  const existing = await getRowById(table, id);
   if (!existing) {
     return c.json({ error: "Not found" }, 404);
   }
 
-  deleteRow(table, id);
+  await deleteRow(table, id);
   return c.json({ ok: true });
 });
 

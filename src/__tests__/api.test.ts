@@ -18,7 +18,7 @@ describe("Root API", () => {
   test("GET / returns API info", async () => {
     const res = await getReq("/");
     const data = await json<{ name: string; version: string }>(res);
-    expect(data.name).toBe("Drizzle + Bun SQLite API");
+    expect(data.name).toBe("Drizzle + Turso SQLite API");
     expect(data.version).toBe("1.0.0");
   });
 });

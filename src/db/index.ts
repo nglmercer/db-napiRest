@@ -1,17 +1,21 @@
-import { Database } from "bun:sqlite";
-import { drizzle } from "drizzle-orm/bun-sqlite";
-import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
 import * as schema from "./schema";
 
-const DB_PATH = process.env.DB_PATH || "app.db";
+const dbUrl = process.env.DATABASE_URL || "file:app.db";
+const authToken = process.env.DATABASE_AUTH_TOKEN;
 
-const sqlite = new Database(DB_PATH);
-sqlite.exec("PRAGMA journal_mode = WAL;");
+const client = createClient({
+  url: dbUrl,
+  ...(authToken ? { authToken } : {}),
+});
 
-export const db = drizzle(sqlite, { schema });
+export const db = drizzle(client, { schema });
 
-export function initDatabase() {
-  sqlite.exec(`
+export async function initDatabase() {
+  await client.execute("PRAGMA journal_mode = WAL");
+
+  await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL DEFAULT 'User',
@@ -109,5 +113,5 @@ export function initDatabase() {
   console.log("Database tables initialized");
 }
 
-export { sqlite };
+export { client };
 export type DB = typeof db;

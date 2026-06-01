@@ -1,11 +1,11 @@
 import { Router } from "napi-router/adapter/router";
 import { Validator } from "napi-router";
-import { sqlite, initDatabase } from "./db";
+import { client, initDatabase } from "./db";
 import { v1Router } from "./routes";
 import { existsSync, statSync } from "node:fs";
 import { getTableMetadata } from "./utils/db";
 
-initDatabase();
+await initDatabase();
 
 const validator = new Validator();
 const serverRouter = new Router();
@@ -18,22 +18,22 @@ serverRouter.cors("*", "/", {
 
 serverRouter.mount("/api/v1", v1Router);
 
-serverRouter.get("/", (c) => {
-  const tables = sqlite
-    .query(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
-    )
-    .all() as { name: string }[];
+serverRouter.get("/", async (c) => {
+  const result = await client.execute(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+  );
 
-  const result = tables.map(({ name }) => {
-    const meta = getTableMetadata(name);
-    return { name, ...meta };
-  });
+  const tables = await Promise.all(
+    result.rows.map(async ({ name }) => {
+      const meta = await getTableMetadata(name as string);
+      return { name, ...meta };
+    }),
+  );
 
   return c.json({
-    name: "Drizzle + Bun SQLite API",
+    name: "Drizzle + Turso SQLite API",
     version: "1.0.0",
-    tables: result,
+    tables,
   });
 });
 
