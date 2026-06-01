@@ -1,24 +1,30 @@
 import { Hono } from "hono";
-import { db } from "../db";
-import { schemas } from "../db/schema";
+import { sqlite } from "../db";
+import { getTableMetadata, getTableColumns } from "../utils/db";
 
 const tablesRouter = new Hono();
 
 tablesRouter.get("/", (c) => {
-  const tables = db.listTables().map((name) => {
-    const meta = db.getTableMetadata(name);
+  const tables = sqlite
+    .query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+    .all() as { name: string }[];
+
+  const result = tables.map(({ name }) => {
+    const meta = getTableMetadata(name);
     return { name, ...meta };
   });
-  return c.json({ tables });
+  return c.json({ tables: result });
 });
 
 tablesRouter.get("/:name", (c) => {
   const name = c.req.param("name");
-  const meta = db.getTableMetadata(name);
-  if (!meta) return c.json({ error: "Table not found" }, 404);
+  const meta = getTableMetadata(name);
+  if (!meta) {
+    return c.json({ error: "Table not found" }, 404);
+  }
 
-  const schema = schemas.find((s) => s.name === name);
-  return c.json({ ...meta, columns: schema?.columns ?? [] });
+  const columns = getTableColumns(name);
+  return c.json({ ...meta, columns });
 });
 
 export default tablesRouter;

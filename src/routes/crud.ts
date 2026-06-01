@@ -1,114 +1,133 @@
 import { Hono } from "hono";
-import { db } from "../db";
-import { getValidTables, findSchema, quoteValue, getNextId, tableGetById } from "../utils/db";
+import { sqlite } from "../db";
+import { getValidTables, findSchema, getRowById, deleteRow, getNextId, getAllRows, getTableColumns } from "../utils/db";
 
 const crudRouter = new Hono();
 
 crudRouter.get("/:table", (c) => {
   const table = c.req.param("table");
   const validTables = getValidTables();
-  if (!validTables.has(table)) return c.json({ error: "Table not found" }, 404);
+  if (!validTables.has(table)) {
+    return c.json({ error: "Table not found" }, 404);
+  }
 
   const limit = Number(c.req.query("limit") || "100");
   const offset = Number(c.req.query("offset") || "0");
-  const result = db.getRows(table, offset, limit);
-  const data = result;
+  const data = getAllRows(table, limit, offset);
   return c.json({ data });
 });
 
 crudRouter.get("/:table/:id", (c) => {
   const table = c.req.param("table");
-  const id = parseInt(c.req.param("id"));
+  const id = parseInt(c.req.param("id") || "0");
   const validTables = getValidTables();
-  if (!validTables.has(table)) return c.json({ error: "Table not found" }, 404);
+  if (!validTables.has(table)) {
+    return c.json({ error: "Table not found" }, 404);
+  }
 
-  const data = tableGetById(table, id);
-  if (!data) return c.json({ error: "Not found" }, 404);
+  const data = getRowById(table, id);
+  if (!data) {
+    return c.json({ error: "Not found" }, 404);
+  }
   return c.json({ data });
 });
 
 crudRouter.post("/:table", async (c) => {
   const table = c.req.param("table");
   const validTables = getValidTables();
-  if (!validTables.has(table)) return c.json({ error: "Table not found" }, 404);
+  if (!validTables.has(table)) {
+    return c.json({ error: "Table not found" }, 404);
+  }
 
-  const body = await c.req.json();
-  const schema = findSchema(table);
-  if (!schema) return c.json({ error: "Schema not found" }, 404);
+  const body = await c.req.json<Record<string, unknown>>();
+  const tableDef = findSchema(table);
+  if (!tableDef) {
+    return c.json({ error: "Schema not found" }, 404);
+  }
 
-  const nextId = body.id != null ? body.id : getNextId(table);
+  const columns = getTableColumns(table);
+  const insertData: Record<string, unknown> = {};
 
-  const columns = [
-    "id",
-    ...schema.columns
-      .filter((col) => col.name !== "id" && col.name in body)
-      .map((col) => col.name),
-  ];
+  for (const col of columns) {
+    if (col === "id") continue;
+    if (col in body) {
+      insertData[col] = body[col];
+    }
+  }
 
-  if (columns.length <= 1) {
+  if (Object.keys(insertData).length === 0) {
     return c.json({ error: "No valid columns provided" }, 400);
   }
 
-  const values = columns.map((col) => {
-    if (col === "id") return String(nextId);
-    const type = schema.columns.find((c) => c.name === col)!.dataType;
-    return quoteValue(body[col], type);
-  });
-  //this table has 7 columns and insertRow receive not same quantity of columns
-  //db.insertRow(table, [...values]);
-  console.log(columns, values)
-  db.executeSql(
-    `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${values.join(", ")})`
-  );
+  const now = new Date().toISOString();
+  if ("created_at" in tableDef && !("created_at" in insertData)) {
+    insertData.created_at = now;
+  }
 
-  const row = tableGetById(table, nextId);
-  return c.json({ data: row }, 201);
+  const placeholders = Object.keys(insertData).map(() => "?").join(", ");
+  const colNames = Object.keys(insertData).map((c) => `"${c}"`).join(", ");
+  const values = Object.values(insertData);
+
+  try {
+    const result = sqlite.run(
+      `INSERT INTO "${table}" (${colNames}) VALUES (${placeholders})`,
+      values as (string | number | boolean | null)[]
+    );
+
+    const row = getRowById(table, Number(result.lastInsertRowid));
+    return c.json({ data: row }, 201);
+  } catch (e) {
+    return c.json({ error: "Insert failed", detail: String(e) }, 400);
+  }
 });
 
 crudRouter.put("/:table/:id", async (c) => {
   const table = c.req.param("table");
   const id = c.req.param("id");
   const validTables = getValidTables();
-  if (!validTables.has(table)) return c.json({ error: "Table not found" }, 404);
+  if (!validTables.has(table)) {
+    return c.json({ error: "Table not found" }, 404);
+  }
 
-  const ids = db.findByI64(table, "id", parseInt(id));
-  if (ids.length === 0) return c.json({ error: "Not found" }, 404);
+  const existing = getRowById(table, parseInt(id));
+  if (!existing) {
+    return c.json({ error: "Not found" }, 404);
+  }
 
-  const body = await c.req.json();
-  const schema = findSchema(table);
-  if (!schema) return c.json({ error: "Schema not found" }, 404);
+  const body = await c.req.json<Record<string, unknown>>();
+  const columns = getTableColumns(table);
 
-  const columns = schema.columns
-    .filter((col) => col.name !== "id" && col.name in body)
-    .map((col) => col.name);
-
-  if (columns.length === 0) {
+  const updateCols = columns.filter((col) => col !== "id" && col in body);
+  if (updateCols.length === 0) {
     return c.json({ error: "No valid columns provided" }, 400);
   }
 
-  const setClauses = columns
-    .map((col) => {
-      const type = schema.columns.find((c) => c.name === col)!.dataType;
-      return `${col} = ${quoteValue(body[col], type)}`;
-    })
-    .join(", ");
+  const setClauses = updateCols.map((col) => `"${col}" = ?`).join(", ");
+  const values = updateCols.map((col) => body[col]);
 
-  db.executeSql(`UPDATE ${table} SET ${setClauses} WHERE id = ${id}`);
+  sqlite.run(
+    `UPDATE "${table}" SET ${setClauses} WHERE id = ?`,
+    [...values, parseInt(id)] as (string | number | boolean | null)[]
+  );
 
-  const row = tableGetById(table, parseInt(id));
+  const row = getRowById(table, parseInt(id));
   return c.json({ data: row });
 });
 
 crudRouter.delete("/:table/:id", (c) => {
   const table = c.req.param("table");
-  const id = parseInt(c.req.param("id"));
+  const id = parseInt(c.req.param("id") || "0");
   const validTables = getValidTables();
-  if (!validTables.has(table)) return c.json({ error: "Table not found" }, 404);
+  if (!validTables.has(table)) {
+    return c.json({ error: "Table not found" }, 404);
+  }
 
-  const ids = db.findByI64(table, "id", id);
-  if (ids.length === 0) return c.json({ error: "Not found" }, 404);
+  const existing = getRowById(table, id);
+  if (!existing) {
+    return c.json({ error: "Not found" }, 404);
+  }
 
-  db.deleteRow(table, id);
+  deleteRow(table, id);
   return c.json({ ok: true });
 });
 

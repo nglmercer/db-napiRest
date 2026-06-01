@@ -1,12 +1,12 @@
 import app from "./server";
 
-const getReq = (path: string) => app.fetch(new Request(`http://localhost${path}`));
+const getReq = (path: string) => app.request(path);
 const postReq = (path: string, body: object) =>
-  app.fetch(new Request(`http://localhost${path}`, {
+  app.request(path, {
     method: "POST",
     body: JSON.stringify(body),
     headers: { "Content-Type": "application/json" },
-  }));
+  });
 
 const json = async <T>(res: Response) => res.json() as Promise<T>;
 

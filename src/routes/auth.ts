@@ -1,64 +1,70 @@
 import { Hono } from "hono";
-import { create, verify, scryptHash, scryptCompare } from "webtoken-rs";
 import { db } from "../db";
+import { users } from "../db/schema";
+import { eq } from "drizzle-orm";
+import { SignJWT, jwtVerify } from "jose";
 
-const AUTH_SECRET = process.env.AUTH_SECRET || "your-32-character-secret-key-1234";
-const TOKEN_EXPIRY = 3600;
+const AUTH_SECRET = new TextEncoder().encode(
+  process.env.AUTH_SECRET || "your-32-character-secret-key-1234"
+);
+const TOKEN_EXPIRY = "1h";
+
+async function hashPassword(password: string): Promise<string> {
+  return await Bun.password.hash(password, "bcrypt");
+}
+
+async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return await Bun.password.verify(password, hash);
+}
+
+async function createToken(payload: Record<string, unknown>): Promise<string> {
+  return await new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(TOKEN_EXPIRY)
+    .sign(AUTH_SECRET);
+}
+
+async function verifyToken(token: string): Promise<Record<string, unknown>> {
+  const { payload } = await jwtVerify(token, AUTH_SECRET);
+  return payload as Record<string, unknown>;
+}
 
 const authRouter = new Hono();
 
-function getUserByEmail(email: string): Record<string, unknown> | null {
-  // findByString returns row indices (positions), not ID values
-  const indices = db.findByString("users", "email", email);
-  if (!indices || indices.length === 0) return null;
-  const row = db.getRowById("users", Number(indices[0]));
-  return row;
-}
-
-function getUserById(id: number): Record<string, unknown> | null {
-  // findByI64 returns row indices (positions), not ID values
-  const indices = db.findByI64("users", "id", id);
-  if (!indices || indices.length === 0) return null;
-  const row = db.getRowById("users", Number(indices[0]));
-  return row;
-}
-
 authRouter.post("/register", async (c) => {
-  const body = await c.req.json();
-  const { email, password, name, age } = body;
+  const body = await c.req.json<{ email?: string; password?: string; name?: string; age?: number }>();
 
-  if (!email || !password) {
+  if (!body.email || !body.password) {
     return c.json({ error: "Email and password required" }, 400);
   }
-  // db.createUniqueIndex("users", "email");
-  const existingIds = db.findByString("users", "email", email);
-  if (existingIds && existingIds.length > 0) {
+
+  const existing = db.select().from(users).where(eq(users.email, body.email)).get();
+  if (existing) {
     return c.json({ error: "Email already registered" }, 409);
   }
-  /*
-  // no data copy
-    db.maxColumn("users", "age");   // → 42
-    db.minColumn("users", "age");   // → 18
-    db.sumColumn("users", "age");   // → 1000
-    db.avgColumn("users", "age");   // → 28.5
-  */
-  const nextId = (db.maxColumn("users", "id") ?? 0) + 1;
-  const hashedPassword = await scryptHash(password, 10);
+
+  const hashedPassword = await hashPassword(body.password);
   const now = new Date().toISOString();
 
-  // Column order: id, name, email, password, age, active, created_at
-  const resp = db.insertOrReplace(
-    "users",
-    [nextId, name || "User", email, hashedPassword, age ?? null, true, now],
-    "email",  // unique column to match on
-  );
-  if (!resp) return c.json({ error: "Failed to register" }, 500);
+  const result = db
+    .insert(users)
+    .values({
+      name: body.name || "User",
+      email: body.email,
+      password: hashedPassword,
+      age: body.age ?? null,
+      active: true,
+      created_at: now,
+    })
+    .returning()
+    .get();
 
-  const token = create({ sub: String(nextId), email }, AUTH_SECRET, TOKEN_EXPIRY);
+  const token = await createToken({ sub: String(result.id), email: result.email });
 
   return c.json(
     {
-      user: { id: nextId, name: name || "User", email, active: true, created_at: now },
+      user: { id: result.id, name: result.name, email: result.email, active: result.active, created_at: result.created_at },
       token,
     },
     201,
@@ -66,30 +72,29 @@ authRouter.post("/register", async (c) => {
 });
 
 authRouter.post("/login", async (c) => {
-  const body = await c.req.json();
-  const { email, password } = body;
+  const body = await c.req.json<{ email?: string; password?: string }>();
 
-  if (!email || !password) {
+  if (!body.email || !body.password) {
     return c.json({ error: "Email and password required" }, 400);
   }
 
-  const user = getUserByEmail(email);
+  const user = db.select().from(users).where(eq(users.email, body.email)).get();
   if (!user) {
     return c.json({ error: "Invalid credentials" }, 401);
   }
 
-  const isValid = await scryptCompare(password, user.password as string);
+  const isValid = await verifyPassword(body.password, user.password);
   if (!isValid) {
     return c.json({ error: "Invalid credentials" }, 401);
   }
 
-  const token = create({ sub: String(user.id), email: user.email as string }, AUTH_SECRET, TOKEN_EXPIRY);
+  const token = await createToken({ sub: String(user.id), email: user.email });
 
   const { password: _pw, ...safeUser } = user;
   return c.json({ user: safeUser, token });
 });
 
-authRouter.get("/me", (c) => {
+authRouter.get("/me", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return c.json({ error: "No token provided" }, 401);
@@ -97,10 +102,10 @@ authRouter.get("/me", (c) => {
 
   const token = authHeader.slice(7);
   try {
-    const payload = verify(token, AUTH_SECRET);
+    const payload = await verifyToken(token);
     const userId = Number(payload.sub);
 
-    const user = getUserById(userId);
+    const user = db.select().from(users).where(eq(users.id, userId)).get();
     if (!user) {
       return c.json({ error: "User not found" }, 404);
     }

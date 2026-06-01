@@ -1,16 +1,16 @@
 import { describe, test, expect } from "bun:test";
 import app from "../server";
 
-const getReq = (path: string) => app.fetch(new Request(`http://localhost${path}`));
+const getReq = (path: string) => app.request(path);
 
 const postReq = (path: string, body: object) =>
-  app.fetch(new Request(`http://localhost${path}`, { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } }));
+  app.request(path, { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
 
 const putReq = (path: string, body: object) =>
-  app.fetch(new Request(`http://localhost${path}`, { method: "PUT", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } }));
+  app.request(path, { method: "PUT", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
 
 const deleteReq = (path: string) =>
-  app.fetch(new Request(`http://localhost${path}`, { method: "DELETE" }));
+  app.request(path, { method: "DELETE" });
 
 const json = async <T>(res: Response) => res.json() as Promise<T>;
 
@@ -18,7 +18,7 @@ describe("Root API", () => {
   test("GET / returns API info", async () => {
     const res = await getReq("/");
     const data = await json<{ name: string; version: string }>(res);
-    expect(data.name).toBe("DBOBJ + Hono API");
+    expect(data.name).toBe("Drizzle + Bun SQLite API");
     expect(data.version).toBe("1.0.0");
   });
 });

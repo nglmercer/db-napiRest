@@ -1,98 +1,123 @@
 import { Hono } from "hono";
-import { verify } from "webtoken-rs";
-import { db } from "../db";
+import { db, sqlite } from "../db";
+import { reels } from "../db/schema";
+import { eq } from "drizzle-orm";
+import { jwtVerify } from "jose";
 
-const AUTH_SECRET = process.env.AUTH_SECRET || "your-32-character-secret-key-1234";
+const AUTH_SECRET = new TextEncoder().encode(
+  process.env.AUTH_SECRET || "your-32-character-secret-key-1234"
+);
 
-function authMiddleware(c: any, next: () => Promise<void>) {
+async function verifyToken(token: string): Promise<Record<string, unknown>> {
+  const { payload } = await jwtVerify(token, AUTH_SECRET);
+  return payload as Record<string, unknown>;
+}
+
+type Variables = {
+  userId: number;
+};
+
+const reelsRouter = new Hono<{ Variables: Variables }>();
+
+reelsRouter.use("*", async (c, next) => {
   const authHeader = c.req.header("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return c.json({ error: "No token provided" }, 401);
+  if (!authHeader?.startsWith("Bearer ")) {
+    return c.json({ error: "No token provided" }, 401);
+  }
 
   const token = authHeader.slice(7);
   try {
-    const payload = verify(token, AUTH_SECRET);
-    c.set("userId" as any, Number(payload.sub));
-    return next();
+    const payload = await verifyToken(token);
+    c.set("userId", Number(payload.sub));
   } catch {
     return c.json({ error: "Invalid token" }, 401);
   }
-}
 
-const reelsRouter = new Hono();
-
-reelsRouter.use("/*", authMiddleware);
+  await next();
+});
 
 reelsRouter.get("/", (c) => {
-  const userId = (c as any).get("userId") as number;
-
-  const result = db.executeSql(`SELECT * FROM reels WHERE user_id = ${userId}`);
-  const data = Array.isArray(result) ? result : [];
+  const userId = c.get("userId");
+  const data = db.select().from(reels).where(eq(reels.user_id, userId)).all();
   return c.json({ data });
 });
 
 reelsRouter.get("/:id", (c) => {
-  const id = parseInt(c.req.param("id"));
-  const result = db.executeSql(`SELECT * FROM reels WHERE id = ${id}`);
-  const data = Array.isArray(result) && result.length > 0 ? result[0] : null;
-  if (!data) return c.json({ error: "Not found" }, 404);
+  const id = parseInt(c.req.param("id") || "0");
+  const data = db.select().from(reels).where(eq(reels.id, id)).get();
+  if (!data) {
+    return c.json({ error: "Not found" }, 404);
+  }
   return c.json({ data });
 });
 
 reelsRouter.post("/", async (c) => {
-  const userId = (c as any).get("userId") as number;
-  const body = await c.req.json();
-  const { title, description, video_url, thumbnail_url } = body;
+  const userId = c.get("userId");
+  const body = await c.req.json<{ title?: string; description?: string; video_url?: string; thumbnail_url?: string }>();
 
-  if (!title || !video_url) {
+  if (!body.title || !body.video_url) {
     return c.json({ error: "Title and video_url are required" }, 400);
   }
 
-  const nextId = (db.maxColumn("reels", "id") ?? 0) + 1;
   const now = new Date().toISOString();
 
-  const columns = ["id", "user_id", "title", "description", "video_url", "thumbnail_url", "views", "created_at"];
-  const values = `${nextId}, ${userId}, '${String(title).replace(/'/g, "''")}', '${String(description || "").replace(/'/g, "''")}', '${String(video_url).replace(/'/g, "''")}', '${String(thumbnail_url || "").replace(/'/g, "''")}', 0, '${now}'`;
+  const result = db
+    .insert(reels)
+    .values({
+      user_id: userId,
+      title: body.title,
+      description: body.description || null,
+      video_url: body.video_url,
+      thumbnail_url: body.thumbnail_url || null,
+      views: 0,
+      created_at: now,
+    })
+    .returning()
+    .get();
 
-  db.executeSql(`INSERT INTO reels (${columns.join(", ")}) VALUES (${values})`);
-
-  const row = db.executeSql(`SELECT * FROM reels WHERE id = ${nextId}`);
-  return c.json({ data: Array.isArray(row) ? row[0] : row }, 201);
+  return c.json({ data: result }, 201);
 });
 
 reelsRouter.put("/:id", async (c) => {
-  const id = parseInt(c.req.param("id"));
-  const userId = (c as any).get("userId") as number;
-  const body = await c.req.json();
+  const id = parseInt(c.req.param("id") || "0");
+  const userId = c.get("userId");
+  const body = await c.req.json<Record<string, unknown>>();
 
-  const existing = db.executeSql(`SELECT * FROM reels WHERE id = ${id}`);
-  const reel = Array.isArray(existing) && existing.length > 0 ? existing[0] as Record<string, unknown> : null;
-  if (!reel) return c.json({ error: "Not found" }, 404);
-  if (reel && reel.user_id !== userId) return c.json({ error: "Forbidden" }, 403);
+  const existing = db.select().from(reels).where(eq(reels.id, id)).get();
+  if (!existing) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  if (existing.user_id !== userId) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
 
-  const setClauses = Object.entries(body)
-    .filter(([key]) => !["id", "user_id", "created_at"].includes(key))
-    .map(([key, val]) => {
-      if (typeof val === "number") return `${key} = ${val}`;
-      return `${key} = '${String(val).replace(/'/g, "''")}'`;
-    })
-    .join(", ");
+  const { id: _id, user_id: _uid, created_at: _ca, ...updateData } = body;
 
-  if (setClauses) db.executeSql(`UPDATE reels SET ${setClauses} WHERE id = ${id}`);
+  if (Object.keys(updateData).length === 0) {
+    return c.json({ data: existing });
+  }
 
-  const updated = db.executeSql(`SELECT * FROM reels WHERE id = ${id}`);
-  return c.json({ data: Array.isArray(updated) ? updated[0] : updated });
+  const values = Object.values(updateData);
+  const result = sqlite
+    .query(`UPDATE "reels" SET ${Object.keys(updateData).map((k) => `"${k}" = ?`).join(", ")} WHERE id = ? RETURNING *`)
+    .get(...(values as (string | number | boolean | null)[]), id);
+
+  return c.json({ data: result });
 });
 
 reelsRouter.delete("/:id", (c) => {
-  const id = parseInt(c.req.param("id"));
-  const userId = (c as any).get("userId") as number;
+  const id = parseInt(c.req.param("id") || "0");
+  const userId = c.get("userId");
 
-  const existing = db.executeSql(`SELECT * FROM reels WHERE id = ${id}`);
-  const reel = Array.isArray(existing) && existing.length > 0 ? existing[0] as Record<string, unknown> : null;
-  if (!reel) return c.json({ error: "Not found" }, 404);
-  if (reel && reel.user_id !== userId) return c.json({ error: "Forbidden" }, 403);
+  const existing = db.select().from(reels).where(eq(reels.id, id)).get();
+  if (!existing) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  if (existing.user_id !== userId) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
 
-  db.executeSql(`DELETE FROM reels WHERE id = ${id}`);
+  sqlite.run(`DELETE FROM "reels" WHERE id = ?`, [id]);
   return c.json({ ok: true });
 });
 

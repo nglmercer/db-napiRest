@@ -1,18 +1,18 @@
 import { describe, test, expect } from "bun:test";
 import app from "../server";
 
-const getReq = (path: string, token?: string) => {
-  const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  return app.fetch(new Request(`http://localhost${path}`, { headers }));
-};
-
 const postReq = (path: string, body: object) =>
-  app.fetch(new Request(`http://localhost${path}`, {
+  app.request(path, {
     method: "POST",
     body: JSON.stringify(body),
     headers: { "Content-Type": "application/json" },
-  }));
+  });
+
+const getReq = (path: string, token?: string) => {
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return app.request(path, { headers });
+};
 
 const json = async <T>(res: Response) => res.json() as Promise<T>;
 
@@ -81,7 +81,6 @@ describe("Auth API", () => {
 
     const res = await getReq("/api/v1/auth/me", token);
     const data = await json<{ user: unknown }>(res);
-    console.log(data);
     expect(res.status).toBe(200);
     expect(data.user).toBeDefined();
   });
