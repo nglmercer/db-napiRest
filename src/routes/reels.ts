@@ -2,15 +2,13 @@ import { Hono } from "hono";
 import { db, sqlite } from "../db";
 import { reels } from "../db/schema";
 import { eq } from "drizzle-orm";
-import { jwtVerify } from "jose";
+import { verify } from "webtoken-rs";
 
-const AUTH_SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET || "your-32-character-secret-key-1234"
-);
+const AUTH_SECRET =
+  process.env.AUTH_SECRET || "your-32-character-secret-key-1234";
 
-async function verifyToken(token: string): Promise<Record<string, unknown>> {
-  const { payload } = await jwtVerify(token, AUTH_SECRET);
-  return payload as Record<string, unknown>;
+function verifyToken(token: string): Record<string, unknown> {
+  return verify(token, AUTH_SECRET) as Record<string, unknown>;
 }
 
 type Variables = {
@@ -27,7 +25,7 @@ reelsRouter.use("*", async (c, next) => {
 
   const token = authHeader.slice(7);
   try {
-    const payload = await verifyToken(token);
+    const payload = verifyToken(token);
     c.set("userId", Number(payload.sub));
   } catch {
     return c.json({ error: "Invalid token" }, 401);
@@ -53,7 +51,12 @@ reelsRouter.get("/:id", (c) => {
 
 reelsRouter.post("/", async (c) => {
   const userId = c.get("userId");
-  const body = await c.req.json<{ title?: string; description?: string; video_url?: string; thumbnail_url?: string }>();
+  const body = await c.req.json<{
+    title?: string;
+    description?: string;
+    video_url?: string;
+    thumbnail_url?: string;
+  }>();
 
   if (!body.title || !body.video_url) {
     return c.json({ error: "Title and video_url are required" }, 400);
@@ -99,7 +102,11 @@ reelsRouter.put("/:id", async (c) => {
 
   const values = Object.values(updateData);
   const result = sqlite
-    .query(`UPDATE "reels" SET ${Object.keys(updateData).map((k) => `"${k}" = ?`).join(", ")} WHERE id = ? RETURNING *`)
+    .query(
+      `UPDATE "reels" SET ${Object.keys(updateData)
+        .map((k) => `"${k}" = ?`)
+        .join(", ")} WHERE id = ? RETURNING *`,
+    )
     .get(...(values as (string | number | boolean | null)[]), id);
 
   return c.json({ data: result });
