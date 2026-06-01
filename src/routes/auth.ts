@@ -1,4 +1,6 @@
-import { Hono } from "hono";
+import { Validator } from "napi-router";
+import { Router } from "napi-router/adapter/router";
+import { s, validate } from "napi-router/adapter/router/validator";
 import { db } from "../db";
 import { users } from "../db/schema";
 import { eq } from "drizzle-orm";
@@ -7,21 +9,25 @@ import { scryptHash, scryptCompare, create, verify } from "webtoken-rs";
 const AUTH_SECRET =
   process.env.AUTH_SECRET || "your-32-character-secret-key-1234";
 const TOKEN_EXPIRY = 3600;
-
-const authRouter = new Hono();
+const validator = new Validator();
+const authRouter = new Router();
 
 authRouter.post("/register", async (c) => {
-  const body = await c.req.json<{
-    email?: string;
-    password?: string;
-    name?: string;
-    age?: number;
-  }>();
-
-  if (!body.email || !body.password) {
-    return c.json({ error: "Email and password required" }, 400);
+  const bodyraw = await c.req.json();
+  const bodyresult = validate(
+    bodyraw,
+    {
+      name: s.string().required().min(2).max(100),
+      email: s.string().required().pattern("email"),
+      password: s.string().required().min(6).max(100),
+      age: s.integer(),
+    },
+    validator,
+  );
+  if (!bodyresult.success) {
+    return c.json({ error: bodyresult.errors }, 400);
   }
-
+  const body = bodyresult.data;
   const existing = db
     .select()
     .from(users)
@@ -69,13 +75,26 @@ authRouter.post("/register", async (c) => {
 });
 
 authRouter.post("/login", async (c) => {
-  const body = await c.req.json<{ email?: string; password?: string }>();
+  const bodyraw = await c.req.json();
 
-  if (!body.email || !body.password) {
-    return c.json({ error: "Email and password required" }, 400);
+  const bodyresult = validate(
+    bodyraw,
+    {
+      email: s.string().required().pattern("email"),
+      password: s.string().required().min(6).max(100),
+    },
+    validator,
+  );
+  if (!bodyresult.success) {
+    return c.json({ error: bodyresult.errors }, 400);
   }
 
-  const user = db.select().from(users).where(eq(users.email, body.email)).get();
+  const body = bodyresult.data;
+  const user = db
+    .select()
+    .from(users)
+    .where(eq(users.email, body.email))
+    .get();
   if (!user) {
     return c.json({ error: "Invalid credentials" }, 401);
   }
@@ -96,7 +115,7 @@ authRouter.post("/login", async (c) => {
 });
 
 authRouter.get("/me", async (c) => {
-  const authHeader = c.req.header("Authorization");
+  const authHeader = c.req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return c.json({ error: "No token provided" }, 401);
   }

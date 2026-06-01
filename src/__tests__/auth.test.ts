@@ -36,6 +36,7 @@ describe("Auth API", () => {
     const res = await postReq("/api/v1/auth/register", {
       email: testEmail,
       password: "different",
+      name: "Test User",
     });
     expect(res.status).toBe(409);
   });

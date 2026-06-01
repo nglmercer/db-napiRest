@@ -16,7 +16,7 @@ export function initDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL DEFAULT 'User',
       email TEXT NOT NULL UNIQUE,
-      password TEXT NOT NULL,
+      password TEXT,
       age INTEGER,
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL

@@ -1,4 +1,6 @@
-import { Hono } from "hono";
+import { Router } from "napi-router/adapter/router";
+import { Validator } from "napi-router";
+import { s, validate } from "napi-router/adapter/router/validator";
 import { db, sqlite } from "../db";
 import { reels } from "../db/schema";
 import { eq } from "drizzle-orm";
@@ -6,19 +8,16 @@ import { verify } from "webtoken-rs";
 
 const AUTH_SECRET =
   process.env.AUTH_SECRET || "your-32-character-secret-key-1234";
+const validator = new Validator();
 
 function verifyToken(token: string): Record<string, unknown> {
   return verify(token, AUTH_SECRET) as Record<string, unknown>;
 }
 
-type Variables = {
-  userId: number;
-};
+const reelsRouter = new Router();
 
-const reelsRouter = new Hono<{ Variables: Variables }>();
-
-reelsRouter.use("*", async (c, next) => {
-  const authHeader = c.req.header("Authorization");
+reelsRouter.use("*", "/", async (c) => {
+  const authHeader = c.req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return c.json({ error: "No token provided" }, 401);
   }
@@ -30,18 +29,16 @@ reelsRouter.use("*", async (c, next) => {
   } catch {
     return c.json({ error: "Invalid token" }, 401);
   }
-
-  await next();
 });
 
 reelsRouter.get("/", (c) => {
-  const userId = c.get("userId");
+  const userId = c.get<number>("userId");
   const data = db.select().from(reels).where(eq(reels.user_id, userId)).all();
   return c.json({ data });
 });
 
 reelsRouter.get("/:id", (c) => {
-  const id = parseInt(c.req.param("id") || "0");
+  const id = c.req.pathParam("id").int(0)!;
   const data = db.select().from(reels).where(eq(reels.id, id)).get();
   if (!data) {
     return c.json({ error: "Not found" }, 404);
@@ -50,17 +47,25 @@ reelsRouter.get("/:id", (c) => {
 });
 
 reelsRouter.post("/", async (c) => {
-  const userId = c.get("userId");
-  const body = await c.req.json<{
-    title?: string;
-    description?: string;
-    video_url?: string;
-    thumbnail_url?: string;
-  }>();
+  const userId = c.get<number>("userId");
+  const bodyraw = await c.req.json();
 
-  if (!body.title || !body.video_url) {
-    return c.json({ error: "Title and video_url are required" }, 400);
+  const bodyresult = validate(
+    bodyraw,
+    {
+      title: s.string().required(),
+      video_url: s.string().required(),
+      description: s.string(),
+      thumbnail_url: s.string(),
+    },
+    validator,
+  );
+
+  if (!bodyresult.success) {
+    return c.json({ error: bodyresult.errors }, 400);
   }
+
+  const body = bodyresult.data;
 
   const now = new Date().toISOString();
 
@@ -82,9 +87,9 @@ reelsRouter.post("/", async (c) => {
 });
 
 reelsRouter.put("/:id", async (c) => {
-  const id = parseInt(c.req.param("id") || "0");
-  const userId = c.get("userId");
-  const body = await c.req.json<Record<string, unknown>>();
+  const id = c.req.pathParam("id").int(0)!;
+  const userId = c.get<number>("userId");
+  const body = (await c.req.json()) as Record<string, unknown>;
 
   const existing = db.select().from(reels).where(eq(reels.id, id)).get();
   if (!existing) {
@@ -113,8 +118,8 @@ reelsRouter.put("/:id", async (c) => {
 });
 
 reelsRouter.delete("/:id", (c) => {
-  const id = parseInt(c.req.param("id") || "0");
-  const userId = c.get("userId");
+  const id = c.req.pathParam("id").int(0)!;
+  const userId = c.get<number>("userId");
 
   const existing = db.select().from(reels).where(eq(reels.id, id)).get();
   if (!existing) {

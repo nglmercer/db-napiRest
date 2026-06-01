@@ -1,25 +1,36 @@
-import { Hono } from "hono";
+import { Router } from "napi-router/adapter/router";
+import { Validator } from "napi-router";
+import { s, validate } from "napi-router/adapter/router/validator";
 import { sqlite } from "../db";
-import { getValidTables, findSchema, getRowById, deleteRow, getNextId, getAllRows, getTableColumns } from "../utils/db";
+import {
+  getValidTables,
+  findSchema,
+  getRowById,
+  deleteRow,
+  getNextId,
+  getAllRows,
+  getTableColumns,
+} from "../utils/db";
 
-const crudRouter = new Hono();
+const validator = new Validator();
+const crudRouter = new Router();
 
 crudRouter.get("/:table", (c) => {
-  const table = c.req.param("table");
+  const table = c.req.pathParam("table").require("table");
   const validTables = getValidTables();
   if (!validTables.has(table)) {
     return c.json({ error: "Table not found" }, 404);
   }
 
-  const limit = Number(c.req.query("limit") || "100");
-  const offset = Number(c.req.query("offset") || "0");
+  const limit = c.req.queryParam("limit").int(100)!;
+  const offset = c.req.queryParam("offset").int(0)!;
   const data = getAllRows(table, limit, offset);
   return c.json({ data });
 });
 
 crudRouter.get("/:table/:id", (c) => {
-  const table = c.req.param("table");
-  const id = parseInt(c.req.param("id") || "0");
+  const table = c.req.pathParam("table").require("table");
+  const id = c.req.pathParam("id").int(0)!;
   const validTables = getValidTables();
   if (!validTables.has(table)) {
     return c.json({ error: "Table not found" }, 404);
@@ -33,13 +44,32 @@ crudRouter.get("/:table/:id", (c) => {
 });
 
 crudRouter.post("/:table", async (c) => {
-  const table = c.req.param("table");
+  const table = c.req.pathParam("table").require("table");
   const validTables = getValidTables();
   if (!validTables.has(table)) {
     return c.json({ error: "Table not found" }, 404);
   }
 
-  const body = await c.req.json<Record<string, unknown>>();
+  const bodyraw = await c.req.json();
+  const bodyresult = validate(
+    bodyraw,
+    {
+      data: s.object({
+        name: s.string().required(),
+        email: s.string().required().pattern("email"),
+        price: s.number(),
+        description: s.string(),
+        stock: s.integer(),
+        title: s.string().required(),
+        content: s.string(),
+        video_url: s.string(),
+        thumbnail_url: s.string(),
+      }),
+    },
+    validator,
+  );
+
+  const body = (bodyresult.success ? bodyresult.data : bodyraw) as Record<string, unknown>;
   const tableDef = findSchema(table);
   if (!tableDef) {
     return c.json({ error: "Schema not found" }, 404);
@@ -64,14 +94,18 @@ crudRouter.post("/:table", async (c) => {
     insertData.created_at = now;
   }
 
-  const placeholders = Object.keys(insertData).map(() => "?").join(", ");
-  const colNames = Object.keys(insertData).map((c) => `"${c}"`).join(", ");
+  const placeholders = Object.keys(insertData)
+    .map(() => "?")
+    .join(", ");
+  const colNames = Object.keys(insertData)
+    .map((c) => `"${c}"`)
+    .join(", ");
   const values = Object.values(insertData);
 
   try {
     const result = sqlite.run(
       `INSERT INTO "${table}" (${colNames}) VALUES (${placeholders})`,
-      values as (string | number | boolean | null)[]
+      values as (string | number | boolean | null)[],
     );
 
     const row = getRowById(table, Number(result.lastInsertRowid));
@@ -82,8 +116,8 @@ crudRouter.post("/:table", async (c) => {
 });
 
 crudRouter.put("/:table/:id", async (c) => {
-  const table = c.req.param("table");
-  const id = c.req.param("id");
+  const table = c.req.pathParam("table").require("table");
+  const id = c.req.pathParam("id").require("id");
   const validTables = getValidTables();
   if (!validTables.has(table)) {
     return c.json({ error: "Table not found" }, 404);
@@ -94,7 +128,7 @@ crudRouter.put("/:table/:id", async (c) => {
     return c.json({ error: "Not found" }, 404);
   }
 
-  const body = await c.req.json<Record<string, unknown>>();
+  const body = (await c.req.json()) as Record<string, unknown>;
   const columns = getTableColumns(table);
 
   const updateCols = columns.filter((col) => col !== "id" && col in body);
@@ -107,7 +141,7 @@ crudRouter.put("/:table/:id", async (c) => {
 
   sqlite.run(
     `UPDATE "${table}" SET ${setClauses} WHERE id = ?`,
-    [...values, parseInt(id)] as (string | number | boolean | null)[]
+    [...values, parseInt(id)] as (string | number | boolean | null)[],
   );
 
   const row = getRowById(table, parseInt(id));
@@ -115,8 +149,8 @@ crudRouter.put("/:table/:id", async (c) => {
 });
 
 crudRouter.delete("/:table/:id", (c) => {
-  const table = c.req.param("table");
-  const id = parseInt(c.req.param("id") || "0");
+  const table = c.req.pathParam("table").require("table");
+  const id = c.req.pathParam("id").int(0)!;
   const validTables = getValidTables();
   if (!validTables.has(table)) {
     return c.json({ error: "Table not found" }, 404);

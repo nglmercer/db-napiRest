@@ -1,8 +1,8 @@
-import { Hono } from "hono";
+import { Router } from "napi-router/adapter/router";
 import { sqlite } from "../db";
 import { getTableMetadata, getTableColumns } from "../utils/db";
 
-const tablesRouter = new Hono();
+const tablesRouter = new Router();
 
 tablesRouter.get("/", (c) => {
   const tables = sqlite
@@ -17,7 +17,7 @@ tablesRouter.get("/", (c) => {
 });
 
 tablesRouter.get("/:name", (c) => {
-  const name = c.req.param("name");
+  const name = c.req.pathParam("name").require("name");
   const meta = getTableMetadata(name);
   if (!meta) {
     return c.json({ error: "Table not found" }, 404);
