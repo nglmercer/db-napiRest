@@ -31,7 +31,7 @@ authRouter.post("/register", async (c) => {
     return c.json({ error: "Email already registered" }, 409);
   }
 
-  const hashedPassword = await scryptHash(body.password);
+  const hashedPassword = await scryptHash(body.password, 4);
   const now = new Date().toISOString();
 
   const result = db
