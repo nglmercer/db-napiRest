@@ -54,10 +54,10 @@ authRouter.post("/register", async (c) => {
     .returning()
     .get();
 
-  const token = create(
+  const token = sign(
     { sub: String(result.id), email: result.email },
     AUTH_SECRET,
-    TOKEN_EXPIRY,
+    { expiresIn: TOKEN_EXPIRY }
   );
 
   return c.json(
@@ -96,15 +96,15 @@ authRouter.post("/login", async (c) => {
     return c.json({ error: "Invalid credentials" }, 401);
   }
 
-  const isValid = await scryptCompare(body.password, user.password!);
+  const isValid = await bcrypt.compare(body.password, user.password!);
   if (!isValid) {
     return c.json({ error: "Invalid credentials" }, 401);
   }
 
-  const token = create(
+  const token = sign(
     { sub: String(user.id), email: user.email },
     AUTH_SECRET,
-    TOKEN_EXPIRY,
+    { expiresIn: TOKEN_EXPIRY }
   );
 
   const { password: _pw, ...safeUser } = user;

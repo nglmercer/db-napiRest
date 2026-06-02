@@ -52,7 +52,10 @@ export function Route({ path, component, children, exact }: RouteProps) {
   const { path: currentPath } = useRouter();
   const match = exact ? currentPath === path : currentPath.startsWith(path);
   if (!match) return null;
-  if (component) return component();
+  if (component) {
+    const Component = component;
+    return <Component />;
+  }
   return <>{children}</>;
 }
 
