@@ -41,6 +41,31 @@ export async function initDatabase() {
   } catch (e) {
     // Column already exists, ignore
   }
+  try {
+    await client.execute(`ALTER TABLE reels ADD COLUMN processing_job_id TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    await client.execute(`ALTER TABLE reels ADD COLUMN hls_url TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    await client.execute(`ALTER TABLE reels ADD COLUMN processing_status TEXT DEFAULT 'pending'`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    await client.execute(`ALTER TABLE reels ADD COLUMN processing_error TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+  try {
+    await client.execute(`ALTER TABLE reels ADD COLUMN processed_at TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
 
   await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS users (

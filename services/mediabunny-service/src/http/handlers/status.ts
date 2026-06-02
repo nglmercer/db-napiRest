@@ -4,6 +4,11 @@ import { JobManager } from "../../utils/jobManager.js";
 export async function statusHandler(c: Context) {
   try {
     const jobId = c.req.param("jobId");
+    
+    if (!jobId) {
+      return c.json({ error: "jobId is required" }, 400);
+    }
+    
     const job = JobManager.getJob(jobId);
 
     if (!job) {

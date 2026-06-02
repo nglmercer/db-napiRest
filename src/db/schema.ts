@@ -95,6 +95,11 @@ export const reels = sqliteTable("reels", {
   likes_count: integer("likes_count").notNull().default(0),
   comments_count: integer("comments_count").notNull().default(0),
   shares_count: integer("shares_count").notNull().default(0),
+  processing_job_id: text("processing_job_id"),
+  hls_url: text("hls_url"),
+  processing_status: text("processing_status").default("pending"),
+  processing_error: text("processing_error"),
+  processed_at: text("processed_at"),
   created_at: text("created_at").notNull(),
 });
 

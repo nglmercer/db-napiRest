@@ -9,6 +9,10 @@ export async function hlsStreamHandler(c: Context) {
     const jobId = c.req.param("jobId");
     const filename = c.req.param("filename");
 
+    if (!jobId || !filename) {
+      return c.json({ error: "jobId and filename are required" }, 400);
+    }
+
     const filePath = join(config.outputDir, jobId, filename);
 
     if (!existsSync(filePath)) {

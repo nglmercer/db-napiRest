@@ -19,7 +19,7 @@ crudRouter.get("/:table", async (c) => {
   const table = c.req.pathParam("table").require("table");
   
   // Skip reserved route names
-  const reservedRoutes = new Set(["feed", "social", "upload", "auth", "reels", "tables"]);
+  const reservedRoutes = new Set(["feed", "social", "upload", "auth", "reels", "tables", "video"]);
   if (reservedRoutes.has(table)) {
     return c.json({ error: "Not found" }, 404);
   }

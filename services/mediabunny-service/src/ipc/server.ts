@@ -69,6 +69,11 @@ export class IPCServer {
     
     // Find available worker
     const workerId = Array.from(this.workers.keys())[0];
+    
+    if (!workerId) {
+      throw new Error("No available workers");
+    }
+    
     const worker = this.workers.get(workerId);
 
     if (!worker) {

@@ -31,8 +31,8 @@ uploadRouter.post("/video", async (c) => {
     }
 
     const result = await client.execute({
-      sql: `INSERT INTO reels (user_id, title, description, video_url, thumbnail_url, music, hashtags, views, likes_count, comments_count, shares_count, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, datetime('now'))`,
+      sql: `INSERT INTO reels (user_id, title, description, video_url, thumbnail_url, music, hashtags, views, likes_count, comments_count, shares_count, processing_status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 'pending', datetime('now'))`,
       args: [
         userId,
         body.title,
@@ -44,9 +44,39 @@ uploadRouter.post("/video", async (c) => {
       ],
     });
 
+    const reelId = Number(result.lastInsertRowid);
+
+    // Auto-procesar video con mediabunny-service
+    try {
+      const MEDIABUNNY_URL = process.env.MEDIABUNNY_URL || "http://localhost:3002";
+      const processResponse = await fetch(`${MEDIABUNNY_URL}/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inputUrl: body.video_url,
+          outputFormat: "hls",
+          options: {
+            segmentDuration: 6,
+            playlistSize: 10,
+          },
+        }),
+      });
+
+      if (processResponse.ok) {
+        const jobData = await processResponse.json() as { jobId: string };
+        await client.execute({
+          sql: `UPDATE reels SET processing_job_id = ?, processing_status = 'processing' WHERE id = ?`,
+          args: [jobData.jobId, reelId],
+        });
+      }
+    } catch (error) {
+      console.error("Failed to auto-process video:", error);
+      // No fallar el upload si el procesamiento falla
+    }
+
     const reel = await client.execute({
       sql: `SELECT r.*, u.name as user_name, u.email as user_email FROM reels r LEFT JOIN users u ON r.user_id = u.id WHERE r.id = ?`,
-      args: [Number(result.lastInsertRowid)],
+      args: [reelId],
     });
 
     return c.json({ data: reel.rows[0] }, 201);
