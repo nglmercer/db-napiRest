@@ -89,7 +89,34 @@ export const reels = sqliteTable("reels", {
   description: text("description"),
   video_url: text("video_url").notNull(),
   thumbnail_url: text("thumbnail_url"),
+  music: text("music"),
+  hashtags: text("hashtags"),
   views: integer("views").notNull().default(0),
+  likes_count: integer("likes_count").notNull().default(0),
+  comments_count: integer("comments_count").notNull().default(0),
+  shares_count: integer("shares_count").notNull().default(0),
+  created_at: text("created_at").notNull(),
+});
+
+export const likes = sqliteTable("likes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  user_id: integer("user_id").notNull(),
+  reel_id: integer("reel_id").notNull(),
+  created_at: text("created_at").notNull(),
+});
+
+export const reelComments = sqliteTable("reel_comments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  reel_id: integer("reel_id").notNull(),
+  user_id: integer("user_id").notNull(),
+  content: text("content").notNull(),
+  created_at: text("created_at").notNull(),
+});
+
+export const follows = sqliteTable("follows", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  follower_id: integer("follower_id").notNull(),
+  following_id: integer("following_id").notNull(),
   created_at: text("created_at").notNull(),
 });
 
@@ -115,3 +142,9 @@ export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
 export type Reel = typeof reels.$inferSelect;
 export type NewReel = typeof reels.$inferInsert;
+export type Like = typeof likes.$inferSelect;
+export type NewLike = typeof likes.$inferInsert;
+export type ReelComment = typeof reelComments.$inferSelect;
+export type NewReelComment = typeof reelComments.$inferInsert;
+export type Follow = typeof follows.$inferSelect;
+export type NewFollow = typeof follows.$inferInsert;

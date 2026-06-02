@@ -17,6 +17,13 @@ const crudRouter = new Router();
 
 crudRouter.get("/:table", async (c) => {
   const table = c.req.pathParam("table").require("table");
+  
+  // Skip reserved route names
+  const reservedRoutes = new Set(["feed", "social", "upload", "auth", "reels", "tables"]);
+  if (reservedRoutes.has(table)) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  
   const validTables = await getValidTables();
   if (!validTables.has(table)) {
     return c.json({ error: "Table not found" }, 404);

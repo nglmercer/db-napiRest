@@ -1,13 +1,16 @@
 import { Router } from "napi-router/adapter/router";
-import { Validator } from "napi-router";
 import { client, initDatabase } from "./db";
 import { v1Router } from "./routes";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, mkdirSync } from "node:fs";
 import { getTableMetadata } from "./utils/db";
 
 await initDatabase();
 
-const validator = new Validator();
+const uploadsDir = "./uploads";
+if (!existsSync(uploadsDir)) {
+  mkdirSync(uploadsDir, { recursive: true });
+}
+
 const serverRouter = new Router();
 
 serverRouter.cors("*", "/", {
@@ -34,11 +37,13 @@ serverRouter.get("/", async (c) => {
     name: "Drizzle + Turso SQLite API",
     version: "1.0.0",
     tables,
+    routes: serverRouter.getRouteDefinitions(),
   });
 });
 
 const staticDir = "./web/dist";
 if (existsSync(staticDir) && statSync(staticDir).isDirectory()) {
+  console.log(staticDir);
   serverRouter.static("/", staticDir, "index.html");
 }
 

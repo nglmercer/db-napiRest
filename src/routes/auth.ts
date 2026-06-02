@@ -4,7 +4,8 @@ import { s, validate } from "napi-router/adapter/router/validator";
 import { db } from "../db";
 import { users } from "../db/schema";
 import { eq } from "drizzle-orm";
-import { scryptHash, scryptCompare, create, verify } from "webtoken-rs";
+import { sign, verify } from "jsonwebtoken";
+import bcrypt from "bcrypt";
 
 const AUTH_SECRET =
   process.env.AUTH_SECRET || "your-32-character-secret-key-1234";
@@ -37,7 +38,7 @@ authRouter.post("/register", async (c) => {
     return c.json({ error: "Email already registered" }, 409);
   }
 
-  const hashedPassword = await scryptHash(body.password, 4);
+  const hashedPassword = await bcrypt.hash(body.password, 10);
   const now = new Date().toISOString();
 
   const result = await db

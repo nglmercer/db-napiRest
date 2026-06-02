@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/bun": "latest",
+    "@types/jsonwebtoken": "^9.0.10",
     "drizzle-kit": "^0.30.0"
   },
   "peerDependencies": {
@@ -20,8 +22,10 @@
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
+    "bcrypt": "^6.0.0",
     "drizzle-orm": "^0.38.0",
     "hono": "^4.0.0",
+    "jsonwebtoken": "^9.0.3",
     "napi-router": "^1.2.4",
     "webtoken-rs": "^1.0.2"
   }
